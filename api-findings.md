@@ -1,0 +1,141 @@
+# API findings (step 0)
+
+Exploration of the Montpellier Méditerranée Métropole open data API, run on 2026-10-13.
+
+Legend:
+
+- **[measured]**: observed in a real API response during the exploration
+- **[spec]**: stated by the OpenAPI file (`fiware3m.yaml`) but not verified
+- **[open]**: not known yet
+
+Base URL: `https://portail-api-data.montpellier.fr`. Raw outputs are kept in `data/raw/exploration/` (not committed).
+
+## 1. Access
+
+- [measured] No authentication. `Accept: application/json` is enough, no JSON-LD `Link` header needed.
+- [spec] Rate limits: 10,000 requests/second and 2,000,000 requests/hour. Not tested.
+- [spec] The old (non NGSI-LD) endpoints stay available until 2026-12-31. Only `/ngsi-ld/v1/...` is used here.
+
+## 2. Entity lists
+
+`GET /ngsi-ld/v1/entities?type=<Type>&limit=1000`
+
+| Type | Entities | Notes |
+|---|---|---|
+| BikeHireDockingStation | 52 | all `working`, all updated within the same minute |
+| OffStreetParking | 39 | only 21 have `availableSpotNumber` |
+| EcoCounter | 70 | no readings in the list, all `vehicleType = bicycle` |
+
+- [measured] All counts are below the 1,000 limit, so lists need no pagination.
+- [measured] ID formats: `urn:ngsi-ld:station:006`, `urn:ngsi-ld:OffStreetParking:34172-P-001`, `urn:ngsi-ld:EcoCounter:COM23120110`.
+- [measured] Lists contain inactive entities (see section 5): a listed entity is not necessarily a working sensor.
+
+## 3. Temporal endpoint behaviour
+
+`GET /ngsi-ld/v1/temporal/entities/{entityId}`
+
+- [measured] Without `format`, the response is a list of full instances (`value`, `unitCode`, `instanceId`, `observedAt`), although the spec says the default is `temporalValues`.
+- [measured] `format=temporalValues` returns the same number of points (1,432 for one day of station 006) in 37 KiB instead of 218 KiB. Shape: `{"id": ..., "type": ..., "<attribute>": {"type": "Property", "values": [[value, "timestamp"], ...]}}`.
+- [measured] A response holds at most 10,000 points (station 006, `temporalValues`, one attribute). The 1,000 limit of the spec does not apply to temporal queries. Up to 6 days (8,592 points) the answer is HTTP 200. With 7 days the server answered HTTP 206 (Partial Content) with exactly 10,000 points, from the start of the range up to 2026-08-07T23:33:37Z, while the range asked ended on 2026-08-08.
+- [measured] An HTTP 206 is not an error, but its body is incomplete: the end of the range is cut. The header `Content-Range: date-time <start>-<last timestamp returned>/*` gives the covered range, so the next request can restart from that last timestamp. Code that treats every 2xx as complete would silently store truncated data.
+- [measured] The `Link` header of the response points to the JSON-LD context. It is not a pagination link.
+- [measured] Following 206 responses works: 14 days of station 006 (2026-08-01 to 2026-08-15) came back in 3 pages (10,000 + 10,000 + 50 points). The 20,048 distinct points collected equal the sum of the server's own daily `totalCount` (20,048).
+- [measured] The boundary is inclusive: each new page starts with the last point of the previous page (9,999 new points out of 10,000, then 49 out of 50). Duplicates must be ignored.
+- [measured] Parking P-001 (5-min data): 1, 7, 14 and 31 days all returned HTTP 200 (0.5 s, 1.5 s, 1.9 s, 4.1 s; 221 KiB for 31 days). At 288 points/day, 10,000 points correspond to about 34 days (estimate).
+- [spec] Timestamps are UTC. Observed timestamps end with `Z`.
+- [spec] Defaults are `timerel=after` and `timeAt=2025-12-31T23:59:59Z`. Always pass explicit `timeAt` / `endTimeAt`.
+- [measured] `lastN=3` returned 3 points, oldest first.
+- [measured] `format=aggregatedValues&aggrMethods=totalCount&aggrPeriodDuration=P1D` returns `totalCount: [[count, start, end], ...]`. Days without data are omitted, not returned as 0.
+- [measured] Long ranges time out. A 650-day aggregated query returned HTTP 504 for station 006 (1-min data) and for parking P-001 (5-min data). It succeeded for parking P-007 (99,212 points, 26.8 s) and for an eco-counter (10,673 points, 1.7 s). Response time seems to grow with the number of points. The exact gateway limit is [open].
+- [measured] The temporal endpoint returns HTTP 404 for the 18 parkings that have no `availableSpotNumber` in the list.
+
+## 4. Sampling and coverage (samples only, not all entities)
+
+| Source | Sampling | Observed coverage | Earliest data seen |
+|---|---|---|---|
+| Bike station 006 | ~1 min | 1,429 to 1,433 of 1,440 points/day (about 99.2 to 99.5 %), 7 days in Oct 2026 | 2025-01-05 (earliest day tested) |
+| Parking P-001 | ~5 min (median) | 239, 0, 286 and 182 points on the 4 days tested (288 expected); one 135-min gap on 2026-10-12 | 2025-01-05 (earliest day tested) |
+| Parking P-007 | ~5 min (~280 points/day) | 354 of 365 days with data in 2025 | 2025-01-01 (start of range queried) |
+| Eco-counter COM23120110 | hourly | 469 of 482 days with data between first and last | 2025-06-16 |
+
+- [spec] History starts 2025-01-04 (bikes, parkings) and 2025-01-12 (eco-counters). Start dates vary per sensor: COM23120110 starts later.
+- [open] Why P-001 has 0 points on 2025-06-15.
+
+Two full days (Sunday 2026-10-11 and Monday 2026-10-12, UTC), one request per entity and day, on all 52 bike stations and on the 21 parkings that have `availableSpotNumber`:
+
+| Source | Day | Points | Per entity | Value changes |
+|---|---|---|---|---|
+| Bike stations (52) | Sun 2026-10-11 | 74,516 | 1,433 for every station | 359 (0.5 % of points) |
+| Bike stations (52) | Mon 2026-10-12 | 74,464 | 1,432 for every station | 306 (0.4 % of points) |
+| Parkings (21) | Sun 2026-10-11 | 3,727 | median 184, min 0, max 288 | 1,341 (36.0 %) |
+| Parkings (21) | Mon 2026-10-12 | 3,571 | median 174, min 0, max 288 | 1,585 (44.4 %) |
+
+- A "value change" is a reading that differs from the previous reading of the same entity within the day.
+- [measured] Every bike station has exactly the same number of points on a given day. [hypothesis] The readings are taken for all stations at the same moments, so a missing minute would be missing for all stations. Not checked on timestamps.
+- [measured] Only 0.4 to 0.5 % of the bike readings differ from the previous one. Two days only (a Sunday and a Monday in October): the rate may differ in other seasons.
+- [measured] The two stale parkings (P-005, P-007) have 0 points on both days, which is included in the medians above. The 19 other parkings have between 173 and 288 points per day (288 = one point every 5 minutes), so their coverage varies.
+- [measured] 36 to 44 % of the parking readings differ from the previous one.
+
+Eco-counters, daily scan of `intensity` from 2025-01-01 to 2026-10-12 (UTC), one aggregated request per counter:
+
+- [measured] 67 of 70 counters have data (none for X2H20042632, X2H20063161, XAH23111501). About 700,000 hourly points in total.
+- [measured] 49 counters have data on 2026-10-12, 4 stopped on 2026-10-10 and 14 stopped between 2025-06-22 and 2026-09-17. The day-level scan hides intraday stops (the last point of X2H20063162 is 2026-10-12T00:00Z).
+- [measured] 42 counters have their first data on 2025-01-01, the first day of the range queried, so their real history may start earlier (the spec says 2025-01-12). The other 25 start later: 2025-01-14, 2025-03-10, 2025-06-12, 2025-06-16, 2025-09-23, 2025-10-31, 2025-11-01, 2025-12-17, 2026-06-05 and 2026-07-05 (new counters).
+- [measured] Counters with a long history have data on 607 to 632 of 650 days (XTH24072390: 559), with about 23 of 24 hourly points on days with data. Some are intermittent, for example X2H21070342 (196 of 325 days), X2H20063163 (202 of 325), COM23070049 (39 of 105) and COM24010119 (208 of 263).
+- [measured] 15 counters have an empty or missing `name`. 10 of the 17 inactive counters (stopped for months, or without data) are among them, against 5 of the 53 others.
+- [measured] 5 counters have an `oldVersion` attribute, a `Relationship` to the counter they replace: ZLT26043541 → X2H21070351, ZLT26063734 → X2H21111120, ZLT26063735 → X2H21070342, ZLT26063736 → Y2H20063163, ZLT26063738 → X2H22104772. The old counters found in the list are all nameless and stopped between 2025-06-22 and 2025-11-21, while the new ones start on 2026-07-05: a gap of about 7 to 12 months between an old counter and its replacement.
+- [measured] `Y2H20063163` is not in the entity list, `X2H20063163` is (nameless, last data 2025-11-21). [hypothesis] The reference is a typo for `X2H20063163`.
+- [open] 10 nameless counters have no `oldVersion` link: X2H20042632, X2H20063161 and XAH23111501 (no data), X2H20063164 and COM23120111 (stopped), X2H20042633, X2H20042634, X2H20042635, X2H20063162 and ZLT26063737 (still sending).
+- Raw result: `data/raw/exploration/eco_counters_coverage.json`.
+
+## 5. Freshness census (2026-10-13, about 14:00 UTC)
+
+Last reading per entity (`lastN=1`). The 24 h threshold is crude for hourly counters.
+
+| Type | Fresh (< 24 h) | Older | No data / not found |
+|---|---|---|---|
+| BikeHireDockingStation | 52 | 0 | 0 |
+| OffStreetParking | 19 | 2 | 18 (HTTP 404) |
+| EcoCounter | 48 | 19 | 3 |
+
+- Parkings: P-005 last reading 2026-09-28, P-007 last reading 2025-12-31. The 18 HTTP 404 are exactly the 18 parkings without `availableSpotNumber` in the list.
+- Eco-counters, older: 14 silent for at least 25 days (oldest last reading 2025-06-22) and 5 late by 1.6 to 3 days.
+- Eco-counters, no data since 2025-01-01: X2H20042632, X2H20063161, XAH23111501.
+- [hypothesis] COM23120110, COM23120112, COM23120113 and COM23120114 share the same last reading (2026-10-10T13:00Z), which suggests a common cause (feed, gateway or site). It is not the whole family: COM23120117 and COM24010120 (same first day, 2025-06-16) are still sending data, and COM23120111 stopped in January 2026.
+- [open] Whether late counters are stopped or only published late.
+
+Raw result: `data/raw/exploration/last_readings.json`.
+
+## 6. Data quality notes
+
+- Parkings, static attributes: `maximumAllowedHeight` is a number or the string `"N/A"`; `domaniality` is written `Public`, `public` or `Privé`; `insee` is a number (the spec says string); `parkingType`, `nb_velo`, `nb_2_rm` and `nb_voitures_electriques` are not in the spec.
+- Parking `status` values seen: `Open`, `Full`.
+- Bike station 006: `availableBikeNumber` + `freeSlotNumber` = `totalSlotNumber` (2 + 25 = 27). `totalSlotNumber` has no timestamp (static). Checked on one station only.
+- Eco-counters: one entity per lane (`laneId`, `reversedLane`). `oldVersion` (5 counters) links a counter to the one it replaces (see section 4). `unitCode` is `H10`, meaning [open].
+- All 70 eco-counters have `vehicleType = bicycle`. Two names mention pedestrians (`Compteur Piéton/vélo Pavelet`, `Compteur Piéton/Vélo Berracasa`) and one mentions scooters (`Compteur Vélo et Trottinette Cours Gambetta`). Their entities have the same attributes as the others: no field tells what is counted. What `intensity` counts at these sites (bikes only, or other users too) is [open].
+
+## 7. Implications (not decisions yet)
+
+- Store timestamps as UTC (`timestamptz`) and convert to Paris time only for display.
+- Always use explicit time ranges. Check the HTTP status of every temporal response: on 206, resume from the end of `Content-Range` instead of treating the data as complete.
+- Ingestion must ignore duplicate points (same entity, attribute and timestamp): two pages always overlap on one point at their boundary.
+- Bike readings are about 99.5 % repeats of the previous value, parking readings are not (36 to 44 % change). The storage strategy for bikes (all readings, changes only, or aggregates) is still to decide.
+- Derive "active sensor" from the last reading, not from the entity list.
+- Usable parking targets for project B: the 19 live parkings. P-005 and P-007 have partial history.
+- Eco-counters have different lifetimes, so the analysis must handle start and stop dates per counter.
+- A counter and the one replacing it (`oldVersion`) are different entities with a gap of 7 to 12 months. Their series must not be merged without documenting the gap.
+- Eco-counters are small (about 700,000 hourly points in total). A full history of 650 days (about 15,000 points) exceeds the 10,000-point cap, so raw requests need windows of a few months, or the 206 resume logic.
+
+## 8. Still to verify
+
+- Real history start for bikes, parkings and the 42 counters whose first data is on 2025-01-01 (the first day queried).
+- Whether the 10,000-point cap counts points per attribute or in total, and whether it applies to `/temporal/entities` (several entities).
+- Whether the 206 resume logic also matches the server count for parkings and eco-counters (validated on one bike station only).
+- Whether bike stations really share the same timestamps (same point count per day suggests it).
+- Why parking coverage varies between 173 and 288 points per day (different sampling rates, or gaps).
+- What `intensity` counts at the counters whose name mentions pedestrians (Pavelet, Berracasa) or scooters (Cours Gambetta): bikes only, or other users too.
+- Meaning of the HTTP 404 on 18 parkings and of `H10`.
+- Whether `Y2H20063163` is a typo for `X2H20063163`, and why 10 other counters have no name.
+- Questions only the data owner can answer (contact: `opendata3m@montpellier3m.fr`): what `intensity` counts at the pedestrian and scooter counters, the meaning of `H10`, why 18 parkings have no history.
+- Whether stopped counters come back (re-run the freshness census in a few days and compare).
+- Coverage and sampling for all 161 entities, not only the samples above.
