@@ -136,9 +136,83 @@ Reasons:
 
 ---
 
+## D8. PostgreSQL + PostGIS in Docker Compose
+
+- **Date:** 2026-10-14
+- **Status:** Accepted
+
+**Context.** The project stores time series (one value per sensor and timestamp) and sensor locations shown on a map.
+
+**Decision.** PostgreSQL 18 with the PostGIS 3.6 extension, image `postgis/postgis:18-3.6`, started by `docker compose up`.
+
+- The image tag is pinned: `latest` could change version without warning and break the project.
+- Credentials come from `.env` (see D5). The host port is configurable (`POSTGRES_PORT`, default 5433) because 5432 is often already used by another local PostgreSQL.
+- Data lives in a named Docker volume (`db_data`), so it survives `docker compose down`. Only `docker compose down -v` deletes it.
+- A healthcheck (`pg_isready`) tells other services when the database accepts connections.
+
+**Rejected.**
+- PostgreSQL without PostGIS: coordinates would be two plain number columns, and distance or area queries would be written by hand. Adding PostGIS later means a migration.
+- TimescaleDB: designed for much larger time series. Another tool to explain, with no need at this volume (tens of millions of rows).
+
+**Consequences.** Locations are stored as PostGIS `geometry` columns. The schema is the next decision.
+
+---
+
+## D9. Store every bike station reading
+
+- **Date:** 2026-10-14
+- **Status:** Accepted
+
+**Context.** About 99.5 % of bike readings repeat the previous value (see `api-findings.md`, section 4). Storing all of them means about 75,000 rows per day, about 27 million per year.
+
+**Decision.** Store every reading, as received.
+
+**Rejected.**
+- Changes only (about 360 rows per day): we could no longer tell "value unchanged" from "sensor silent", and building a regular series for the model would need extra work.
+- Aggregates (for example every 5 minutes): the original data would be lost in the database.
+
+**Consequences.** PostgreSQL handles this volume with a suitable index on (sensor, timestamp). If size becomes a problem, compression or aggregation can be added later, since the raw data is kept (D10).
+
+---
+
+## D10. Raw API responses as JSON files in `data/raw/`
+
+- **Date:** 2026-10-14
+- **Status:** Accepted
+
+**Context.** Raw responses must be kept with their collection time so cleaning can be redone (D3).
+
+**Decision.** One JSON file per entity and time window, stored in `data/raw/`, with the collection time in the file name or content.
+
+**Rejected.** A `jsonb` table in PostgreSQL: everything in one place and queryable in SQL, but it roughly doubles the database size and makes backups and resets heavier.
+
+**Consequences.** The loader reads these files to fill the tables, so the tables can be rebuilt from the files without calling the API again.
+
+---
+
+## D11. Incremental sync, run by a collector container
+
+- **Date:** 2026-10-14
+- **Status:** Accepted
+
+**Context.** Step 0 showed that the API keeps history since January 2025. Missing a polling run therefore loses no data, as long as we ask for it later.
+
+**Decision.**
+- **Incremental sync:** for each sensor, ask the temporal endpoint for everything after the last stored timestamp. The same code loads the full history the first time and keeps it up to date afterwards.
+- **Scheduling:** a `collector` service in Docker Compose runs the sync every N minutes.
+
+**Rejected.**
+- Polling current values every minute: any downtime creates a permanent gap.
+- GitHub Actions: runs when the computer is off, but cannot write into a local database. It would need a hosted database and credentials to manage.
+- System cron: lives outside the repository, so it is not reproducible.
+
+**Consequences.** The collector only runs while the computer is on, but the next run catches up. Its correctness depends on the HTTP 206 handling and on deduplication (D1).
+
+---
+
 ## Open decisions (not taken yet)
 
-- Database: PostgreSQL + PostGIS in Docker Compose is proposed, to confirm along with the schema.
-- Storage strategy for bike readings: about 99.5 % of readings repeat the previous value (see `api-findings.md`, section 4). Options: store all readings, store changes only, or store aggregates.
-- Collection scheduling: cron in a container or GitHub Actions.
+- Database schema (tables, keys, indexes).
+- Sync interval of the collector.
+- Where the API code of D7 lives.
 - First forecasting target for project B.
