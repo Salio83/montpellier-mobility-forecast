@@ -9,7 +9,8 @@ Personal project built on the open data API of Montpellier Méditerranée Métro
 4. Show current state and forecasts on an interactive map.
 
 ## Stack
-Python, PostgreSQL/PostGIS, Docker Compose, scikit-learn / LightGBM, Streamlit.
+Python, PostgreSQL/PostGIS, Docker Compose, scikit-learn / LightGBM, Angular (front-end).
+See docs/decisions.md for the reasons behind each choice.
 
 ## Data
 Montpellier Méditerranée Métropole open data API (NGSI-LD), Apache 2.0.
