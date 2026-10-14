@@ -1,4 +1,75 @@
+# ---------------------------------------------------------------
+# Project
+# ---------------------------------------------------------------
 CLAUDE.md
 data/
+
+# Secrets: keep .env local, commit only the template
 .env
-.env.example
+!.env.example
+
+# ---------------------------------------------------------------
+# Python (ingestion/, analysis/, models/)
+# ---------------------------------------------------------------
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ipynb_checkpoints/
+.coverage
+htmlcov/
+
+# Trained model artefacts (regenerable from training scripts)
+models/**/*.pkl
+models/**/*.joblib
+
+# ---------------------------------------------------------------
+# Angular front-end (app/)
+# ---------------------------------------------------------------
+# Compiled output
+app/dist/
+app/tmp/
+app/out-tsc/
+app/bazel-out/
+
+# Node
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Angular cache and tests
+app/.angular/cache/
+app/coverage/
+app/connect.lock
+app/libpeerconnection.log
+testem.log
+app/typings/
+__screenshots__/
+.sass-cache/
+
+# ---------------------------------------------------------------
+# IDEs and editors
+# ---------------------------------------------------------------
+.idea/
+.project
+.classpath
+.c9/
+*.launch
+.settings/
+*.sublime-workspace
+.history/
+
+# VS Code: share only the useful project config
+**/.vscode/*
+!**/.vscode/settings.json
+!**/.vscode/tasks.json
+!**/.vscode/launch.json
+!**/.vscode/extensions.json
+!**/.vscode/mcp.json
+
+# ---------------------------------------------------------------
+# System files
+# ---------------------------------------------------------------
+.DS_Store
+Thumbs.db
