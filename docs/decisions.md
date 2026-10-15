@@ -103,7 +103,7 @@ Why the prefix: in a `.gitignore`, a pattern that contains a `/` (at the start o
 
 **Context.** The front-end shows the current state of stations, car parks and counters on a map, and the forecasts. Data is refreshed periodically (the exact API update rate is still to measure, likely minutes for car parks and about one minute for bike stations).
 
-**Decision.** An Angular application in `app/`, with Leaflet for the map (to confirm when building the map).
+**Decision.** An Angular application in `app/`, with Leaflet for the map (confirmed in D12).
 
 Reasons:
 - Angular is studied in class this year, so the project practises it.
@@ -207,6 +207,50 @@ Reasons:
 - System cron: lives outside the repository, so it is not reproducible.
 
 **Consequences.** The collector only runs while the computer is on, but the next run catches up. Its correctness depends on the HTTP 206 handling and on deduplication (D1).
+
+---
+
+## D12. First front-end reads the Montpellier API directly
+
+- **Date:** 2026-10-15
+- **Status:** Accepted (temporary, until D7)
+
+**Context.** The map is needed early, but the database schema and the backend API (D7) do not exist yet. The Montpellier API allows calls from a browser (`Access-Control-Allow-Origin: *`, checked on 2026-10-15).
+
+**Decision.** The Angular app calls `/ngsi-ld/v1/entities` directly for the current state, every 60 seconds. All API access sits in one service (`MobilityApiService`), which converts NGSI-LD entities into one `Site` type. Leaflet draws the map (confirms D6), with circle markers coloured by type.
+
+**Rejected.**
+- Mock data: the interface would show nothing real.
+- Waiting for the backend: no visible result for weeks.
+
+**Consequences.**
+- No forecasts and no history in the interface yet: the panel says so.
+- Counter readings are not in the entity list, so the panel fetches the last one (`lastN=1`) when a counter is selected (replaced in D13).
+- When FastAPI exists, only the service changes. Components only know `Site`.
+- On an API error the map keeps the last known values and shows a message (roadmap step 4).
+
+---
+
+## D13. Map: hide stale sites, size markers by volume
+
+- **Date:** 2026-10-15
+- **Status:** Accepted
+
+**Context.** The map showed every listed entity, including car parks without any data or months-old values. All markers had the same size, so a 1,200-spot car park looked like an 8-slot bike station.
+
+**Decision.**
+- **Hide** a site when its last live value is older than a limit per type: 1 h for bike stations and car parks, 48 h for counters. Sites that never published a value (18 car parks) are hidden too. The sidebar shows how many sites are hidden.
+- **Size** the markers by volume: capacity for bike stations and car parks, bikes counted in the 24 h up to the last reading for counters. One scale per type, and the radius grows with the square root of the volume so the marker area follows the volume.
+- Counter readings come from one multi-entity temporal request (72 h window = 48 h freshness limit + 24 h total), instead of one request per counter on click.
+
+**Why these limits.** Measured on 2026-10-15 (`api-findings.md`): stations under 2 minutes old, car parks under 10 minutes, but counters 9 to 35 h old even when they work. A 1 h limit for counters would hide all of them.
+
+**Rejected.**
+- Size by current value (free spots, bikes): the map would change at every refresh and empty stations would vanish. The current value stays in the detail panel.
+- One common scale for all types: spots, slots and bikes per day are not comparable.
+- Latest hourly count for counters: zero at night for every counter.
+
+**Consequences.** The map shows fewer sites (123 of 161 on 2026-10-15). If a counter feed is published later than 48 h, it disappears until it catches up.
 
 ---
 

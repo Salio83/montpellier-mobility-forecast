@@ -1,1 +1,27 @@
-/* You can add global styles to this file, and also import other style files */
+@import 'leaflet/dist/leaflet.css';
+
+/* Shared colours. The map markers read the --color-* variables too. */
+:root {
+  --color-bike: #d62828;
+  --color-parking: #1d4ed8;
+  --color-counter: #2a9d4b;
+  --accent: #1d4ed8;
+  --text: #1f2328;
+  --text-muted: #59636e;
+  --border: #d0d7de;
+  --bg: #ffffff;
+  --warning: #9a3412;
+  --warning-bg: #ffedd5;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  color: var(--text);
+  background: var(--bg);
+}

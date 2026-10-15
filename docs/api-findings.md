@@ -51,6 +51,8 @@ Base URL: `https://portail-api-data.montpellier.fr`. Raw outputs are kept in `da
 - [measured] The temporal endpoint returns HTTP 404 for the 18 parkings that have no `availableSpotNumber` in the list.
 - [owner] These 18 parkings have no space guidance system ("système de jalonnement"), so they produce no occupancy data. This is expected, not a fault.
 
+- [measured] Several entities at once: `/ngsi-ld/v1/temporal/entities?type=EcoCounter&attrs=intensity&timerel=after&timeAt=<t>&format=temporalValues` returns the readings of every counter in one request (53 counters with data over 3 days, 2,131 points, 0.3 s, 2026-10-15). Without `timerel` and `timeAt` the server answers HTTP 400 (`'timerel' and 'time' must be used in conjunction`), even with `lastN`.
+
 ## 4. Sampling and coverage (samples only, not all entities)
 
 | Source | Sampling | Observed coverage | Earliest data seen |
@@ -107,6 +109,12 @@ Last reading per entity (`lastN=1`). The 24 h threshold is crude for hourly coun
 - [open] Whether late counters are stopped or only published late.
 
 Raw result: `data/raw/exploration/last_readings.json`.
+
+Publication delay, 2026-10-15 at 08:31 UTC (one snapshot):
+
+- [measured] Bike stations: every reading under 2 minutes old.
+- [measured] Car parks: the 19 live ones under 10 minutes old; P-005 408 h, P-007 6,905 h.
+- [measured] Eco-counters: the most recent reading of any counter was 9 h old. 52 of the 53 counters with data in the last 3 days were 9 to 35 h old, one was 53 h old. Counters seem to be published in batches, not hour by hour. [open] The publication schedule.
 
 ## 6. Data quality notes
 
