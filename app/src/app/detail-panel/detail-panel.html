@@ -1,0 +1,37 @@
+<header>
+  <span class="kind" [attr.data-kind]="site().kind">{{ kindLabels[site().kind] }}</span>
+  <button type="button" class="close" aria-label="Close" (click)="closed.emit()">×</button>
+</header>
+<h2>{{ site().name }}</h2>
+
+@switch (site().kind) {
+  @case ('counter') {
+    <p class="value">{{ site().dailyCount }} <small>bikes in 24 h</small></p>
+    @if (site().observedAt; as observedAt) {
+      <p class="meta">
+        Up to {{ observedAt | date: 'dd/MM HH:mm' }} ({{ age(observedAt) }}). Counters are
+        published with a delay of up to a day and a half.
+      </p>
+    }
+    <p class="note">Counts bicycles only, even where the counter name mentions pedestrians.</p>
+  }
+  @default {
+    <p class="value">
+      {{ site().available }}
+      <small>
+        / {{ site().capacity }} {{ site().kind === 'bike' ? 'bikes available' : 'free spots' }}
+      </small>
+    </p>
+    @if (ratio() !== null) {
+      <div class="gauge"><div [style.width.%]="ratio()! * 100"></div></div>
+    }
+    @if (site().status) {
+      <p class="meta">Status: {{ site().status }}</p>
+    }
+    @if (site().observedAt; as observedAt) {
+      <p class="meta">Updated {{ observedAt | date: 'dd/MM HH:mm' }} ({{ age(observedAt) }})</p>
+    }
+  }
+}
+
+<p class="forecast">Forecast at +30 min: not available yet (model in progress).</p>

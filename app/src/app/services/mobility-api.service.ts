@@ -1,0 +1,147 @@
+import { HttpClient } from '@angular/common/http';
+import { inject, Service } from '@angular/core';
+import { forkJoin, map, Observable } from 'rxjs';
+import { Site, SiteKind } from '../models/site';
+
+// Temporary data source: the Montpellier open data API, called from the
+// browser (it sends Access-Control-Allow-Origin: *). When the FastAPI backend
+// exists (decision D7), only this service has to change.
+const BASE_URL = 'https://portail-api-data.montpellier.fr/ngsi-ld/v1';
+
+// Counter readings asked for: 48 h (freshness limit) + 24 h (daily total).
+// About 3,800 points for all counters, under the 10,000-point cap.
+const COUNTER_WINDOW_HOURS = 72;
+
+// Minimal typing of the NGSI-LD fields we read. Every attribute is wrapped:
+// {"type": "Property", "value": ..., "observedAt": ...}.
+interface Property<T> {
+  value: T;
+  observedAt?: string;
+}
+interface NgsiEntity {
+  id: string;
+  name?: Property<string>;
+  address?: Property<string | { streetAddress?: string }>;
+  location: { value: { coordinates: [number, number] } }; // GeoJSON: [lon, lat]
+  status?: Property<string>;
+  availableBikeNumber?: Property<number>;
+  totalSlotNumber?: Property<number>;
+  availableSpotNumber?: Property<number>;
+  totalSpotNumber?: Property<number>;
+}
+// format=temporalValues: [[value, timestamp], ...], oldest first.
+interface TemporalEntity {
+  id: string;
+  intensity?: { values: [number, string][] };
+}
+export interface CounterSummary {
+  dailyCount: number;
+  observedAt: Date;
+}
+
+const NGSI_TYPES: Record<SiteKind, string> = {
+  bike: 'BikeHireDockingStation',
+  parking: 'OffStreetParking',
+  counter: 'EcoCounter',
+};
+
+// @Service (Angular 22) = @Injectable({ providedIn: 'root' }): one shared instance.
+@Service()
+export class MobilityApiService {
+  private readonly http = inject(HttpClient);
+
+  /** Current state of all stations, car parks and counters. */
+  getSites(): Observable<Site[]> {
+    // Four requests in parallel. All entity lists are below the 1,000 limit
+    // (api-findings.md, section 2), so no pagination is needed.
+    return forkJoin({
+      bike: this.getEntities('bike'),
+      parking: this.getEntities('parking'),
+      counter: this.getEntities('counter'),
+      readings: this.getCounterSummaries(),
+    }).pipe(
+      map(({ bike, parking, counter, readings }) => [
+        ...bike.map((e) => toSite('bike', e)),
+        ...parking.map((e) => toSite('parking', e)),
+        ...counter.map((e) => toSite('counter', e, readings.get(e.id))),
+      ]),
+    );
+  }
+
+  private getEntities(kind: SiteKind): Observable<NgsiEntity[]> {
+    const params = { type: NGSI_TYPES[kind], limit: 1000 };
+    return this.http.get<NgsiEntity[]>(`${BASE_URL}/entities`, { params });
+  }
+
+  // The entity list has no counter readings, so ask the temporal endpoint for
+  // all counters in one request. A counter with no reading in the window is
+  // absent from the answer.
+  private getCounterSummaries(): Observable<Map<string, CounterSummary>> {
+    const since = new Date(Date.now() - COUNTER_WINDOW_HOURS * 3_600_000);
+    const params = {
+      type: NGSI_TYPES.counter,
+      attrs: 'intensity',
+      timerel: 'after',
+      timeAt: since.toISOString(),
+      format: 'temporalValues',
+      limit: 1000,
+    };
+    return this.http
+      .get<TemporalEntity[]>(`${BASE_URL}/temporal/entities`, { params, observe: 'response' })
+      .pipe(
+        map((res) => {
+          // 206 = the server cut the answer at 10,000 points (api-findings.md,
+          // section 3). Not expected at ~3,800 points; warn rather than hide it.
+          if (res.status === 206) console.warn('Counter readings truncated (HTTP 206)');
+          const summaries = new Map<string, CounterSummary>();
+          for (const entity of res.body ?? []) {
+            const summary = summarizeCounter(entity.intensity?.values ?? []);
+            if (summary) summaries.set(entity.id, summary);
+          }
+          return summaries;
+        }),
+      );
+  }
+}
+
+/** Sum of the readings in the 24 h up to the last one. Exported for tests. */
+export function summarizeCounter(values: [number, string][]): CounterSummary | null {
+  const last = values.at(-1);
+  if (!last) return null;
+  const observedAt = new Date(last[1]);
+  const start = observedAt.getTime() - 24 * 3_600_000;
+  // Strictly after start: 24 hourly readings, not 25.
+  const dailyCount = values
+    .filter(([, t]) => new Date(t).getTime() > start)
+    .reduce((sum, [v]) => sum + v, 0);
+  return { dailyCount, observedAt };
+}
+
+/** Converts one NGSI-LD entity into a Site. Exported for tests. */
+export function toSite(kind: SiteKind, e: NgsiEntity, counter?: CounterSummary): Site {
+  const [lon, lat] = e.location.value.coordinates;
+  const live = kind === 'bike' ? e.availableBikeNumber : e.availableSpotNumber;
+  const capacity = kind === 'bike' ? e.totalSlotNumber : e.totalSpotNumber;
+  const observedAt = kind === 'counter' ? counter?.observedAt : live?.observedAt;
+  return {
+    id: e.id,
+    kind,
+    name: siteName(e),
+    lat,
+    lon,
+    available: kind === 'counter' ? null : (live?.value ?? null),
+    capacity: kind === 'counter' ? null : (capacity?.value ?? null),
+    dailyCount: counter?.dailyCount ?? null,
+    status: e.status?.value ?? null,
+    observedAt: observedAt ? new Date(observedAt) : null,
+  };
+}
+
+// Bike stations have no name, only an address object. 15 counters have an
+// empty name: fall back to the end of the id (e.g. COM23120110).
+function siteName(e: NgsiEntity): string {
+  if (e.name?.value) return e.name.value;
+  const address = e.address?.value;
+  if (typeof address === 'object' && address.streetAddress) return address.streetAddress;
+  return e.id.split(':').at(-1) ?? e.id;
+}

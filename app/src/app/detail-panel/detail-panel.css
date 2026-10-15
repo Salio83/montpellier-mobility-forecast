@@ -1,0 +1,71 @@
+:host {
+  display: block;
+  padding: 16px;
+}
+
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.kind {
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.kind[data-kind='bike'] { color: var(--color-bike); }
+.kind[data-kind='parking'] { color: var(--color-parking); }
+.kind[data-kind='counter'] { color: var(--color-counter); }
+
+.close {
+  border: none;
+  background: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  color: var(--text-muted);
+}
+
+h2 {
+  margin: 4px 0 12px;
+  font-size: 1.15rem;
+}
+
+.value {
+  margin: 0;
+  font-size: 2rem;
+  font-weight: 700;
+}
+.value small {
+  font-size: 0.9rem;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.gauge {
+  height: 8px;
+  margin: 8px 0;
+  border-radius: 4px;
+  background: var(--border);
+  overflow: hidden;
+}
+.gauge div {
+  height: 100%;
+  background: var(--accent);
+}
+
+.meta,
+.note,
+.forecast {
+  margin: 6px 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.forecast {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  font-style: italic;
+}
