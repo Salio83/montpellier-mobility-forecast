@@ -6,6 +6,7 @@ Legend:
 
 - **[measured]**: observed in a real API response during the exploration
 - **[spec]**: stated by the OpenAPI file (`fiware3m.yaml`) but not verified
+- **[owner]**: confirmed by the data owner (email reply from opendata@montpellier.fr, 2026-10-14)
 - **[open]**: not known yet
 
 Base URL: `https://portail-api-data.montpellier.fr`. Raw outputs are kept in `data/raw/exploration/` (not committed).
@@ -48,6 +49,7 @@ Base URL: `https://portail-api-data.montpellier.fr`. Raw outputs are kept in `da
 - [measured] `format=aggregatedValues&aggrMethods=totalCount&aggrPeriodDuration=P1D` returns `totalCount: [[count, start, end], ...]`. Days without data are omitted, not returned as 0.
 - [measured] Long ranges time out. A 650-day aggregated query returned HTTP 504 for station 006 (1-min data) and for parking P-001 (5-min data). It succeeded for parking P-007 (99,212 points, 26.8 s) and for an eco-counter (10,673 points, 1.7 s). Response time seems to grow with the number of points. The exact gateway limit is [open].
 - [measured] The temporal endpoint returns HTTP 404 for the 18 parkings that have no `availableSpotNumber` in the list.
+- [owner] These 18 parkings have no space guidance system ("système de jalonnement"), so they produce no occupancy data. This is expected, not a fault.
 
 ## 4. Sampling and coverage (samples only, not all entities)
 
@@ -84,7 +86,7 @@ Eco-counters, daily scan of `intensity` from 2025-01-01 to 2026-10-12 (UTC), one
 - [measured] Counters with a long history have data on 607 to 632 of 650 days (XTH24072390: 559), with about 23 of 24 hourly points on days with data. Some are intermittent, for example X2H21070342 (196 of 325 days), X2H20063163 (202 of 325), COM23070049 (39 of 105) and COM24010119 (208 of 263).
 - [measured] 15 counters have an empty or missing `name`. 10 of the 17 inactive counters (stopped for months, or without data) are among them, against 5 of the 53 others.
 - [measured] 5 counters have an `oldVersion` attribute, a `Relationship` to the counter they replace: ZLT26043541 → X2H21070351, ZLT26063734 → X2H21111120, ZLT26063735 → X2H21070342, ZLT26063736 → Y2H20063163, ZLT26063738 → X2H22104772. The old counters found in the list are all nameless and stopped between 2025-06-22 and 2025-11-21, while the new ones start on 2026-07-05: a gap of about 7 to 12 months between an old counter and its replacement.
-- [measured] `Y2H20063163` is not in the entity list, `X2H20063163` is (nameless, last data 2025-11-21). [hypothesis] The reference is a typo for `X2H20063163`.
+- [measured] `Y2H20063163` is not in the entity list, `X2H20063163` is (nameless, last data 2025-11-21). [owner] The reference is a typo for `X2H20063163`.
 - [open] 10 nameless counters have no `oldVersion` link: X2H20042632, X2H20063161 and XAH23111501 (no data), X2H20063164 and COM23120111 (stopped), X2H20042633, X2H20042634, X2H20042635, X2H20063162 and ZLT26063737 (still sending).
 - Raw result: `data/raw/exploration/eco_counters_coverage.json`.
 
@@ -111,8 +113,9 @@ Raw result: `data/raw/exploration/last_readings.json`.
 - Parkings, static attributes: `maximumAllowedHeight` is a number or the string `"N/A"`; `domaniality` is written `Public`, `public` or `Privé`; `insee` is a number (the spec says string); `parkingType`, `nb_velo`, `nb_2_rm` and `nb_voitures_electriques` are not in the spec.
 - Parking `status` values seen: `Open`, `Full`.
 - Bike station 006: `availableBikeNumber` + `freeSlotNumber` = `totalSlotNumber` (2 + 25 = 27). `totalSlotNumber` has no timestamp (static). Checked on one station only.
-- Eco-counters: one entity per lane (`laneId`, `reversedLane`). `oldVersion` (5 counters) links a counter to the one it replaces (see section 4). `unitCode` is `H10`, meaning [open].
-- All 70 eco-counters have `vehicleType = bicycle`. Two names mention pedestrians (`Compteur Piéton/vélo Pavelet`, `Compteur Piéton/Vélo Berracasa`) and one mentions scooters (`Compteur Vélo et Trottinette Cours Gambetta`). Their entities have the same attributes as the others: no field tells what is counted. What `intensity` counts at these sites (bikes only, or other users too) is [open].
+- Eco-counters: one entity per lane (`laneId`, `reversedLane`). `oldVersion` (5 counters) links a counter to the one it replaces (see section 4). `unitCode` is `H10`. In UN/CEFACT Recommendation 20 (the unit code list NGSI-LD uses), `H10` means "reciprocal hour" (1/h): `intensity` is a count per hour, consistent with the hourly sampling. Source: UNECE Rec. 20 code list. The data owner did not recognise the code when asked.
+- All 70 eco-counters have `vehicleType = bicycle`. Two names mention pedestrians (`Compteur Piéton/vélo Pavelet`, `Compteur Piéton/Vélo Berracasa`) and one mentions scooters (`Compteur Vélo et Trottinette Cours Gambetta`). Their entities have the same attributes as the others: no field tells what is counted.
+- [owner] These counters can tell several user types apart, but the open data only publishes **bicycle** counts. `intensity` counts bikes only, at every counter. **No pedestrian or scooter data is available** in the open data.
 
 ## 7. Implications (not decisions yet)
 
@@ -133,9 +136,6 @@ Raw result: `data/raw/exploration/last_readings.json`.
 - Whether the 206 resume logic also matches the server count for parkings and eco-counters (validated on one bike station only).
 - Whether bike stations really share the same timestamps (same point count per day suggests it).
 - Why parking coverage varies between 173 and 288 points per day (different sampling rates, or gaps).
-- What `intensity` counts at the counters whose name mentions pedestrians (Pavelet, Berracasa) or scooters (Cours Gambetta): bikes only, or other users too.
-- Meaning of the HTTP 404 on 18 parkings and of `H10`.
-- Whether `Y2H20063163` is a typo for `X2H20063163`, and why 10 other counters have no name.
-- Questions only the data owner can answer (contact: `opendata3m@montpellier3m.fr`): what `intensity` counts at the pedestrian and scooter counters, the meaning of `H10`, why 18 parkings have no history.
+- Why 10 counters have no name.
 - Whether stopped counters come back (re-run the freshness census in a few days and compare).
 - Coverage and sampling for all 161 entities, not only the samples above.
