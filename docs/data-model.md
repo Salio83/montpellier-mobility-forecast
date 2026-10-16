@@ -85,6 +85,7 @@ classDiagram
 | EcoCounter | 70 entities, one per lane. NGSI-LD type is `["EcoCounter", "TrafficFlowObserved"]`. 15 have no `name` | measured |
 | CounterReading | `intensity` counts **bikes only**, even at counters named "piéton" or "trottinette". `unitCode` `H10` = per hour | owner |
 | oldVersion | 5 counters point to the counter they replace. Gap of 7 to 12 months between old and new: different entities, not one series | measured |
-| Readings | Timestamps in UTC. Two consecutive pages of the temporal endpoint share one point: `(entity, observedAt)` must be unique | measured |
+| CounterReading | `observedAt` is labelled UTC but is Paris time for `X2H` counters since April 2026, and possibly 1 h late for `COM` counters in summer 2025 (to confirm) | owner + measured |
+| Readings | Timestamps in UTC (except the counter case above). Two consecutive pages of the temporal endpoint share one point: `(entity, observedAt)` must be unique | measured |
 
 Details and figures: `api-findings.md`.

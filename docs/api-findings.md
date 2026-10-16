@@ -6,7 +6,7 @@ Legend:
 
 - **[measured]**: observed in a real API response during the exploration
 - **[spec]**: stated by the OpenAPI file (`fiware3m.yaml`) but not verified
-- **[owner]**: confirmed by the data owner (email reply from opendata@montpellier.fr, 2026-10-14)
+- **[owner]**: confirmed by the data owner (two email replies from opendata@montpellier.fr on 2026-10-14: 09:33 about eco-counter units and timestamps, 14:35 about vehicle types, parkings without data and a typo)
 - **[open]**: not known yet
 
 Base URL: `https://portail-api-data.montpellier.fr`. Raw outputs are kept in `data/raw/exploration/` (not committed).
@@ -123,7 +123,7 @@ Publication delay, 2026-10-15 at 08:31 UTC (one snapshot):
 - Parkings, static attributes: `maximumAllowedHeight` is a number or the string `"N/A"`; `domaniality` is written `Public`, `public` or `Privé`; `insee` is a number (the spec says string); `parkingType`, `nb_velo`, `nb_2_rm` and `nb_voitures_electriques` are not in the spec.
 - Parking `status` values seen: `Open`, `Full`.
 - Bike station 006: `availableBikeNumber` + `freeSlotNumber` = `totalSlotNumber` (2 + 25 = 27). `totalSlotNumber` has no timestamp (static). Checked on one station only.
-- Eco-counters: one entity per lane (`laneId`, `reversedLane`). `oldVersion` (5 counters) links a counter to the one it replaces (see section 4). `unitCode` is `H10`. In UN/CEFACT Recommendation 20 (the unit code list NGSI-LD uses), `H10` means "reciprocal hour" (1/h): `intensity` is a count per hour, consistent with the hourly sampling. Source: UNECE Rec. 20 code list. The data owner did not recognise the code when asked.
+- Eco-counters: one entity per lane (`laneId`, `reversedLane`). `oldVersion` (5 counters) links a counter to the one it replaces (see section 4). `unitCode` is `H10`. In UN/CEFACT Recommendation 20 (the unit code list NGSI-LD uses), `H10` means "reciprocal hour" (1/h): `intensity` is a count per hour, consistent with the hourly sampling. Source: UNECE Rec. 20 code list. The data owner did not recognise the code itself, but [owner] confirmed that `intensity` is a count per hour.
 - All 70 eco-counters have `vehicleType = bicycle`. Two names mention pedestrians (`Compteur Piéton/vélo Pavelet`, `Compteur Piéton/Vélo Berracasa`) and one mentions scooters (`Compteur Vélo et Trottinette Cours Gambetta`). Their entities have the same attributes as the others: no field tells what is counted.
 - [owner] These counters can tell several user types apart, but the open data only publishes **bicycle** counts. `intensity` counts bikes only, at every counter. **No pedestrian or scooter data is available** in the open data.
 
@@ -132,6 +132,32 @@ More quality notes (2026-10-15):
 - [measured] Car park P-019 (Charles de Gaulle, `parkingType` `enclos_en_surface`) lists `totalSpotNumber` 50, but its hourly average of `availableSpotNumber` ranged from 20 to 109 over 7 days (134 of 171 hours above 50). The listed capacity is wrong, or the free spot count covers something else. [open] Which one.
 - [measured] Eco-counter completeness varies a lot from day to day. Over 2026-09-17..10-13, the number of counters with all 24 hourly readings on a UTC day ranged from 14 (2026-09-26) to 51 (2026-10-02, 2026-10-06). Many counter-days have 20 to 23 readings.
 - [measured] Unusual days, measured with the per-counter index (D14): 2026-09-30 (Wednesday) at 20 % of the typical day, 2026-10-03 (Saturday) at 30 %. [open] Cause (weather is a hypothesis, not checked).
+
+### Eco-counter timestamps are shifted for some counters
+
+[owner] A database migration in April 2026 mixed up time zones. The family of a counter is the prefix of its ID (`COM`, `ZLT`, `X2H`).
+
+- Data since April 2026 is stored in UTC: `COM` and `ZLT` counters are at the right time, `X2H` counters are shifted by the UTC–Paris difference.
+- Data before April 2026 was stored in Paris time: `COM` and `ZLT` were shifted, `X2H` were at the right time.
+- A patch has since corrected the data before April 2026. According to the owner, only `X2H` counters are still shifted today.
+- Field check suggested by the owner: on weekdays except Wednesday, the morning peak is between 08:00 and 09:00 Paris time (07Z in winter, 06Z in summer). A peak one hour later means a remaining one-hour shift.
+
+[measured] Check on 2026-10-16: hour of the weekday (Mon, Tue, Thu, Fri) morning peak, in UTC, average over about 3 weeks per period.
+
+| Counter | 2026-02-02..02-28 (winter, before April) | 2025-09-15..10-10 (summer, before April) | 2026-09-07..10-02 (summer, after April) |
+|---|---|---|---|
+| X2H20042633 | 08Z | 07Z | 09Z |
+| X2H20042634 | 08Z | 07Z | 09Z |
+| COM23120117 | 07Z | 07Z | 06Z |
+| COM24010120 | flat profile, no clear peak | flat profile | flat profile |
+| ZLT26063737 | no data | no data | 06Z |
+
+- After April 2026, the two `X2H` counters peak 2 h later than in summer 2025 (09Z instead of 07Z), and 2 h later than the Paris rule (06Z). This matches the owner: recent `X2H` timestamps are Paris time labelled as UTC.
+- After April 2026, `COM23120117` and `ZLT26063737` peak at 06Z (08:00 Paris): correct, as the owner says.
+- Contradiction: in summer 2025, `COM23120117` peaks at 07Z (09:00 Paris), one hour later than the rule and than its own peak in September 2026. [hypothesis] The patch for data before April removed a fixed 1 h instead of following daylight saving time, so summer data before April would still be 1 h late. Not proven: one reliable `COM` counter only.
+- Unclear: by the owner's rule, `X2H` counters before April look 1 h late in winter (08Z instead of 07Z), while the owner says they are correct. These two sites may simply have a later peak (09:00 Paris), which would also explain 07Z in summer 2025.
+- Limits: 4 counters with usable data, about 3 weeks per period, and the method assumes that a site keeps the same peak hour from one year to the next.
+- [open] The exact date of the April 2026 switch, the shift of every counter month by month, and the hours around daylight saving changes (Paris time labelled as UTC has a missing hour in March and a doubled hour in October).
 
 ## 7. Implications (not decisions yet)
 
@@ -143,6 +169,7 @@ More quality notes (2026-10-15):
 - Usable parking targets for project B: the 19 live parkings. P-005 and P-007 have partial history.
 - Eco-counters have different lifetimes, so the analysis must handle start and stop dates per counter.
 - A counter and the one replacing it (`oldVersion`) are different entities with a gap of 7 to 12 months. Their series must not be merged without documenting the gap.
+- Eco-counter timestamps cannot be trusted as UTC for every counter and period (section 6). Hour-of-day analysis and any "hour" feature for the model need a per-family, per-period correction, checked on the data. Daily totals are less affected because night traffic is low, but `X2H` days after April 2026 are cut 2 h off (summer) when grouped by UTC day.
 - Eco-counters are small (about 700,000 hourly points in total). A full history of 650 days (about 15,000 points) exceeds the 10,000-point cap, so raw requests need windows of a few months, or the 206 resume logic.
 
 ## 8. Still to verify
@@ -153,5 +180,6 @@ More quality notes (2026-10-15):
 - Whether bike stations really share the same timestamps (same point count per day suggests it).
 - Why parking coverage varies between 173 and 288 points per day (different sampling rates, or gaps).
 - Why 10 counters have no name.
+- Eco-counter time shift for all counters, month by month (morning peak hour), to date the April 2026 switch and confirm or reject the 1 h shift of `COM` counters in summer 2025.
 - Whether stopped counters come back (re-run the freshness census in a few days and compare).
 - Coverage and sampling for all 161 entities, not only the samples above.
