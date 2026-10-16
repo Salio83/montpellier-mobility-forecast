@@ -1,0 +1,310 @@
+<div class="content">
+  <!-- Right now: computed from the live data of the map, no extra request. -->
+  <section aria-labelledby="now-title">
+    <h2 id="now-title">Right now</h2>
+    @if (loaded()) {
+      @let n = now();
+      <div class="tiles">
+        <div class="tile">
+          <span class="tile-label">Bikes available</span>
+          <span class="tile-value">{{ n.bikesAvailable | number }}</span>
+          <span class="tile-sub"
+            >of {{ n.bikeSlots | number }} slots in {{ n.stations }} stations</span
+          >
+        </div>
+        <div class="tile">
+          <span class="tile-label">Empty stations</span>
+          <span class="tile-value">{{ n.stationsEmpty }}</span>
+          <span class="tile-sub">{{ n.stationsFull }} full</span>
+        </div>
+        <div class="tile">
+          <span class="tile-label">Free car park spots</span>
+          <span class="tile-value">{{ n.freeSpots | number }}</span>
+          <span class="tile-sub"
+            >of {{ n.parkingSpots | number }} in {{ n.parkings }} car parks</span
+          >
+        </div>
+      </div>
+    } @else {
+      <p class="muted">Loading…</p>
+    }
+  </section>
+
+  <!-- Bike traffic: daily sums of the counters over 28 days. -->
+  <section aria-labelledby="traffic-title">
+    <h2 id="traffic-title">Bike traffic, last {{ counterDays }} days</h2>
+    @switch (counters().status) {
+      @case ('loading') {
+        <p class="muted">Loading counter history…</p>
+      }
+      @case ('error') {
+        <p class="error">Could not load the counter history.</p>
+      }
+      @case ('ok') {
+        <div class="grid">
+          <figure>
+            <figcaption>Traffic index by day <small>(100 = typical day)</small></figcaption>
+            <app-chart
+              [config]="dailyChart()"
+              label="Line chart of the daily bike traffic index, 100 being the counters' typical day"
+            />
+            <details>
+              <summary>Show data</summary>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Day (UTC)</th>
+                    <th>Index</th>
+                    <th>Counters</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (d of daily(); track d.date) {
+                    <tr>
+                      <td>{{ d.date }}</td>
+                      <td>
+                        {{
+                          d.index === null ? 'too few counters' : (d.index * 100 | number: '1.0-0')
+                        }}
+                      </td>
+                      <td>{{ d.counters }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </details>
+          </figure>
+
+          <figure>
+            <figcaption>By day of the week <small>(100 = typical day)</small></figcaption>
+            <app-chart
+              [config]="weekdayChart()"
+              label="Bar chart of the bike traffic index for each day of the week"
+            />
+            <details>
+              <summary>Show data</summary>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Day</th>
+                    <th>Index</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (day of weekdays; track day; let i = $index) {
+                    <tr>
+                      <td>{{ day }}</td>
+                      <td>
+                        @if (byWeekday()[i]; as index) {
+                          {{ index * 100 | number: '1.0-0' }}
+                        } @else {
+                          no data
+                        }
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </details>
+          </figure>
+        </div>
+
+        <h3>Busiest counters</h3>
+        <table class="ranking">
+          <thead>
+            <tr>
+              <th>Counter</th>
+              <th>Bikes per day</th>
+              <th>Days</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (c of topCounters(); track c.name) {
+              <tr>
+                <td>{{ c.name }}</td>
+                <td>{{ c.meanPerDay | number: '1.0-0' }}</td>
+                <td>{{ c.days }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+
+        <p class="limits">
+          <strong>Method.</strong> Each counter is compared with its own typical day (the median of
+          its complete days): 120 means 20 % more bikes than usual. The chart shows the median over
+          the counters. This way a day is not "quiet" just because a busy counter did not report.
+          <strong>Limits.</strong> Only days with all 24 hourly readings are used, and only counters
+          with at least 7 of them. A date needs at least 10 counters, otherwise it is a gap:
+          counters are published up to 35 h late. Days are UTC days (02:00 to 02:00 in Paris in
+          summer). With 28 days, each weekday rests on about 4 dates, so one unusual day (a storm, a
+          holiday) moves it a lot. Counters count bicycles only.
+        </p>
+      }
+    }
+  </section>
+
+  <!-- Car parks: hourly average of free spots over 7 days. -->
+  <section aria-labelledby="parking-title">
+    <h2 id="parking-title">Car park occupancy, last {{ historyDays }} days</h2>
+    @switch (parkings().status) {
+      @case ('loading') {
+        <p class="muted">Loading car park history…</p>
+      }
+      @case ('error') {
+        <p class="error">Could not load the car park history.</p>
+      }
+      @case ('ok') {
+        <div class="grid">
+          <figure>
+            <figcaption>Mean occupancy by hour of the day (Paris time)</figcaption>
+            <ul class="legend">
+              <li><span class="swatch" [style.background]="colors.weekday"></span>Weekdays</li>
+              <li><span class="swatch" [style.background]="colors.weekend"></span>Weekend</li>
+            </ul>
+            @if (profileChart(); as config) {
+              <app-chart
+                [config]="config"
+                label="Line chart of the mean car park occupancy by hour, weekdays and weekend"
+              />
+            }
+            <details>
+              <summary>Show data</summary>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Hour</th>
+                    <th>Weekdays</th>
+                    <th>Weekend</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (h of hours; track h) {
+                    <tr>
+                      <td>{{ h }}h</td>
+                      <td>{{ profile()?.weekday?.[h] | percent: '1.0-0' }}</td>
+                      <td>{{ profile()?.weekend?.[h] | percent: '1.0-0' }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </details>
+          </figure>
+
+          <div>
+            <h3>Busiest car parks</h3>
+            <table class="ranking">
+              <thead>
+                <tr>
+                  <th>Car park</th>
+                  <th>Mean occupancy</th>
+                  <th>Spots</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (p of busiest(); track p.name) {
+                  <tr>
+                    <td>{{ p.name }}</td>
+                    <td>
+                      <span class="bar" [style.width.%]="p.occupancy * 60"></span>
+                      {{ p.occupancy | percent: '1.0-0' }}
+                    </td>
+                    <td>{{ p.capacity | number }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <p class="limits">
+          <strong>Limits.</strong> Occupancy = 1 − free spots ÷ capacity, from hourly averages.
+          Every car park weighs the same in the profile, whatever its size. Seven days hold only one
+          weekend, so the weekend line rests on two days.
+          @if (reliable().rejected.length) {
+            Left out because their data contradicts their listed capacity (more free spots than
+            spots): {{ reliable().rejected.join(', ') }}.
+          }
+        </p>
+      }
+    }
+  </section>
+
+  <!-- Bike stations: min / max of available bikes per hour over 7 days. -->
+  <section aria-labelledby="stations-title">
+    <h2 id="stations-title">Empty and full bike stations, last {{ historyDays }} days</h2>
+    @switch (stations().status) {
+      @case ('loading') {
+        <p class="muted">Loading station history (a few seconds)…</p>
+      }
+      @case ('error') {
+        <p class="error">Could not load the station history.</p>
+      }
+      @case ('ok') {
+        @if (overall(); as o) {
+          <p>
+            All stations together were empty for
+            <strong>{{ o.empty | percent: '1.0-1' }}</strong> of the hours and full for
+            <strong>{{ o.full | percent: '1.0-1' }}</strong
+            >.
+          </p>
+        }
+        <div class="grid">
+          <div>
+            <h3>Most often empty</h3>
+            <table class="ranking">
+              <thead>
+                <tr>
+                  <th>Station</th>
+                  <th>Hours empty</th>
+                  <th>Slots</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (s of mostEmpty(); track s.name) {
+                  <tr>
+                    <td>{{ s.name }}</td>
+                    <td>
+                      <span class="bar" [style.width.%]="s.empty * 60"></span
+                      >{{ s.empty | percent: '1.0-0' }}
+                    </td>
+                    <td>{{ s.capacity }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+          <div>
+            <h3>Most often full</h3>
+            <table class="ranking">
+              <thead>
+                <tr>
+                  <th>Station</th>
+                  <th>Hours full</th>
+                  <th>Slots</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (s of mostFull(); track s.name) {
+                  <tr>
+                    <td>{{ s.name }}</td>
+                    <td>
+                      <span class="bar" [style.width.%]="s.full * 60"></span
+                      >{{ s.full | percent: '1.0-0' }}
+                    </td>
+                    <td>{{ s.capacity }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <p class="limits">
+          <strong>Limits.</strong> An hour counts as empty only if the station had no bike during
+          the whole hour (hourly maximum = 0), and as full only if every slot was taken the whole
+          hour (hourly minimum = capacity). Shorter episodes are missed, so these shares are a lower
+          bound. "Full" uses the listed capacity, which may include broken slots.
+        </p>
+      }
+    }
+  </section>
+</div>

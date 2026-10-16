@@ -254,6 +254,33 @@ Reasons:
 
 ---
 
+## D14. Statistics tab: server-side aggregates and a per-counter index
+
+- **Date:** 2026-10-15
+- **Status:** Accepted
+
+**Context.** A second tab shows statistics: current figures, bike traffic (28 days), car park occupancy by hour (7 days) and bike stations empty or full (7 days). There is still no database (D12).
+
+**Decision.**
+- **Data:** the API aggregates on the server (`format=aggregatedValues`), so each section needs one request for all sensors of a type, under 2 s (except bike averages, not used). The page is a separate route, loaded only when opened. Charts use Chart.js (bar and line modules only).
+- **Bike traffic, per-counter index.** Each counter is divided by its own typical day (median of its complete days, at least 7 of them); the chart shows the median over counters, 100 = typical day. A date needs at least 10 counters, otherwise the chart shows a gap. Only days with 24 hourly readings are used. The ranking of counters stays in real bikes per day.
+- **Car parks:** occupancy = 1 − free spots ÷ capacity, from hourly averages, by Paris hour, weekdays and weekend apart. A car park whose data ever exceeds its capacity is left out entirely and named on the page (P-019 on 2026-10-15).
+- **Bike stations:** an hour is "empty" when the hourly maximum is 0 and "full" when the hourly minimum equals the capacity.
+- Every section ends with a "Limits" paragraph.
+
+**Rejected.**
+- *Mean bikes per counter.* Tried first. The set of counters with a complete day goes from 14 to 51 depending on the date, and counters range from under 500 to about 4,600 bikes a day, so the mean moved with the set of counters present. With a filter "at least half the counters", two of four Wednesdays disappeared and the dates vanished from the axis without a sign.
+- *Scaling partial days* (count × 24 ÷ readings): assumes the missing hours look like the others, false when the missing hours are the rush hours.
+- *Leaving out only the impossible car park hours:* the other hours of P-019 use the same wrong capacity.
+- *Hourly averages for empty/full stations:* an average of 0.3 bike does not say whether the station was empty. Min/max does, and is 4 times faster to fetch.
+
+**Consequences.**
+- The traffic charts read as "relative to usual", not in bikes; the caption says so.
+- Empty/full shares are a lower bound (a station empty for 50 minutes of an hour is not counted).
+- Weekday values rest on about 4 dates each; one unusual day moves them a lot (2026-09-30 at 20 %).
+
+---
+
 ## Open decisions (not taken yet)
 
 - Database schema (tables, keys, indexes).

@@ -1,0 +1,39 @@
+<aside class="sidebar">
+  <fieldset>
+    <legend>Show</legend>
+    @for (kind of kinds; track kind) {
+      <label>
+        <input type="checkbox" [checked]="visibleKinds().has(kind)" (change)="toggleKind(kind)" />
+        <span class="dot" [attr.data-kind]="kind"></span>
+        {{ kindLabels[kind] }} <small>({{ counts()[kind] }})</small>
+      </label>
+    }
+    @if (store.hiddenCount() > 0) {
+      <p class="hidden-note">
+        {{ store.hiddenCount() }} sites hidden: no recent data. Point size: capacity for stations
+        and car parks, bikes per day for counters.
+      </p>
+    }
+  </fieldset>
+
+  @if (selected(); as site) {
+    <app-detail-panel [site]="site" (closed)="selectedId.set(null)" />
+  } @else {
+    <p class="hint">Click a point on the map to see its details.</p>
+  }
+
+  <footer>
+    Data:
+    <a href="https://portail-api.montpellier.fr" target="_blank" rel="noopener">
+      Montpellier Méditerranée Métropole</a
+    >
+    (Apache 2.0).
+  </footer>
+</aside>
+
+<app-map
+  class="map"
+  [sites]="visibleSites()"
+  [selectedId]="selectedId()"
+  (siteClick)="selectedId.set($event.id)"
+/>

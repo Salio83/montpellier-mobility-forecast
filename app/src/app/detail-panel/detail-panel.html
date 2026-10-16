@@ -9,8 +9,8 @@
     <p class="value">{{ site().dailyCount }} <small>bikes in 24 h</small></p>
     @if (site().observedAt; as observedAt) {
       <p class="meta">
-        Up to {{ observedAt | date: 'dd/MM HH:mm' }} ({{ age(observedAt) }}). Counters are
-        published with a delay of up to a day and a half.
+        Up to {{ observedAt | date: 'dd/MM HH:mm' }} ({{ age(observedAt) }}). Counters are published
+        with a delay of up to a day and a half.
       </p>
     }
     <p class="note">Counts bicycles only, even where the counter name mentions pedestrians.</p>
