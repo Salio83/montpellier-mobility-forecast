@@ -53,6 +53,8 @@ Base URL: `https://portail-api-data.montpellier.fr`. Raw outputs are kept in `da
 
 - [measured] Several entities at once: `/ngsi-ld/v1/temporal/entities?type=EcoCounter&attrs=intensity&timerel=after&timeAt=<t>&format=temporalValues` returns the readings of every counter in one request (53 counters with data over 3 days, 2,131 points, 0.3 s, 2026-10-15). Without `timerel` and `timeAt` the server answers HTTP 400 (`'timerel' and 'time' must be used in conjunction`), even with `lastN`.
 
+- [measured] Server-side aggregation works on several entities at once (2026-10-15): `format=aggregatedValues` with `aggrMethods` (`sum`, `avg`, `min`, `max`, `totalCount`, several at once separated by commas) and `aggrPeriodDuration` (`PT1H`, `P1D`). Timings: daily `sum,totalCount` of all counters over 28 days 0.4 s; hourly `avg` of the 19 live car parks over 7 days 0.6 s; hourly `avg` of the 52 bike stations over 7 days 7.5 s (HTTP 200, 177 complete buckets per station), but hourly `min,max` of the same 1.9 s. Buckets start at `timeAt`, so `timeAt` at midnight UTC gives whole UTC days.
+
 ## 4. Sampling and coverage (samples only, not all entities)
 
 | Source | Sampling | Observed coverage | Earliest data seen |
@@ -124,6 +126,12 @@ Publication delay, 2026-10-15 at 08:31 UTC (one snapshot):
 - Eco-counters: one entity per lane (`laneId`, `reversedLane`). `oldVersion` (5 counters) links a counter to the one it replaces (see section 4). `unitCode` is `H10`. In UN/CEFACT Recommendation 20 (the unit code list NGSI-LD uses), `H10` means "reciprocal hour" (1/h): `intensity` is a count per hour, consistent with the hourly sampling. Source: UNECE Rec. 20 code list. The data owner did not recognise the code when asked.
 - All 70 eco-counters have `vehicleType = bicycle`. Two names mention pedestrians (`Compteur Piéton/vélo Pavelet`, `Compteur Piéton/Vélo Berracasa`) and one mentions scooters (`Compteur Vélo et Trottinette Cours Gambetta`). Their entities have the same attributes as the others: no field tells what is counted.
 - [owner] These counters can tell several user types apart, but the open data only publishes **bicycle** counts. `intensity` counts bikes only, at every counter. **No pedestrian or scooter data is available** in the open data.
+
+More quality notes (2026-10-15):
+
+- [measured] Car park P-019 (Charles de Gaulle, `parkingType` `enclos_en_surface`) lists `totalSpotNumber` 50, but its hourly average of `availableSpotNumber` ranged from 20 to 109 over 7 days (134 of 171 hours above 50). The listed capacity is wrong, or the free spot count covers something else. [open] Which one.
+- [measured] Eco-counter completeness varies a lot from day to day. Over 2026-09-17..10-13, the number of counters with all 24 hourly readings on a UTC day ranged from 14 (2026-09-26) to 51 (2026-10-02, 2026-10-06). Many counter-days have 20 to 23 readings.
+- [measured] Unusual days, measured with the per-counter index (D14): 2026-09-30 (Wednesday) at 20 % of the typical day, 2026-10-03 (Saturday) at 30 %. [open] Cause (weather is a hypothesis, not checked).
 
 ## 7. Implications (not decisions yet)
 

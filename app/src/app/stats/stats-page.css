@@ -1,0 +1,148 @@
+:host {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.content {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 8px 16px 32px;
+}
+
+section {
+  padding: 16px 0;
+  border-bottom: 1px solid var(--border);
+}
+section:last-child {
+  border-bottom: none;
+}
+
+h2 {
+  font-size: 1.15rem;
+  margin: 0 0 12px;
+}
+h3 {
+  font-size: 1rem;
+  margin: 16px 0 8px;
+}
+
+.muted {
+  color: var(--text-muted);
+}
+.error {
+  color: var(--warning);
+}
+
+/* Stat tiles */
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+.tile {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.tile-label {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+.tile-value {
+  font-size: 1.8rem;
+  font-weight: 600;
+}
+.tile-sub {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+/* Two columns on wide screens, one on phones. */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 24px;
+}
+
+figure {
+  margin: 0;
+  min-width: 0; /* lets the canvas shrink inside the grid */
+}
+figcaption {
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+figcaption small {
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.legend {
+  display: flex;
+  gap: 16px;
+  margin: 0 0 8px;
+  padding: 0;
+  list-style: none;
+  font-size: 0.85rem;
+}
+.legend li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.swatch {
+  width: 14px;
+  height: 3px;
+  border-radius: 2px;
+}
+
+details {
+  margin-top: 8px;
+  font-size: 0.85rem;
+}
+summary {
+  cursor: pointer;
+  color: var(--text-muted);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+  padding: 4px 8px 4px 0;
+}
+td {
+  padding: 4px 8px 4px 0;
+  border-bottom: 1px solid #f0f0ee;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Small in-cell bar: the share is readable at a glance, the number stays.
+   100 % = 60 % of the cell (set in the template), leaving room for the text. */
+.ranking td:nth-child(2) {
+  position: relative;
+  width: 35%;
+}
+.bar {
+  display: inline-block;
+  height: 8px;
+  margin-right: 6px;
+  border-radius: 0 4px 4px 0;
+  background: #2a78d6;
+  vertical-align: middle;
+}
+
+.limits {
+  margin: 16px 0 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}

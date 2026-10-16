@@ -15,9 +15,15 @@ header {
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
-.kind[data-kind='bike'] { color: var(--color-bike); }
-.kind[data-kind='parking'] { color: var(--color-parking); }
-.kind[data-kind='counter'] { color: var(--color-counter); }
+.kind[data-kind='bike'] {
+  color: var(--color-bike);
+}
+.kind[data-kind='parking'] {
+  color: var(--color-parking);
+}
+.kind[data-kind='counter'] {
+  color: var(--color-counter);
+}
 
 .close {
   border: none;

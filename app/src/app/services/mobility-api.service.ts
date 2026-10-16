@@ -2,6 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { inject, Service } from '@angular/core';
 import { forkJoin, map, Observable } from 'rxjs';
 import { Site, SiteKind } from '../models/site';
+import { CounterDay, ParkingSeries, StationSeries } from '../stats/stats';
 
 // Temporary data source: the Montpellier open data API, called from the
 // browser (it sends Access-Control-Allow-Origin: *). When the FastAPI backend
@@ -34,6 +35,11 @@ interface TemporalEntity {
   id: string;
   intensity?: { values: [number, string][] };
 }
+// format=aggregatedValues: one [value, bucketStart, bucketEnd] per bucket and
+// method. Buckets without data are omitted (api-findings.md, section 3).
+type Buckets = [number, string, string][];
+type AggregatedEntity = { id: string } & Record<string, { [method: string]: Buckets } | undefined>;
+
 export interface CounterSummary {
   dailyCount: number;
   observedAt: Date;
@@ -86,19 +92,127 @@ export class MobilityApiService {
       format: 'temporalValues',
       limit: 1000,
     };
+    return this.getTemporal<TemporalEntity>(params).pipe(
+      map((entities) => {
+        const summaries = new Map<string, CounterSummary>();
+        for (const entity of entities) {
+          const summary = summarizeCounter(entity.intensity?.values ?? []);
+          if (summary) summaries.set(entity.id, summary);
+        }
+        return summaries;
+      }),
+    );
+  }
+
+  // ---- History for the statistics tab ------------------------------------
+  // The server aggregates (sum, avg, min, max per hour or day), so each
+  // request returns one bucket per sensor and period instead of every reading.
+  // Measured on 2026-10-15: 0.4 s, 0.6 s and 1.9 s.
+
+  /** Bikes counted per counter and UTC day, with the number of readings. */
+  getCounterDays(days = 28): Observable<CounterDay[]> {
+    return forkJoin({
+      entities: this.getEntities('counter'),
+      series: this.getAggregated('counter', 'intensity', 'sum,totalCount', 'P1D', days),
+    }).pipe(
+      map(({ entities, series }) => {
+        const names = new Map(entities.map((e) => [e.id, siteName(e)]));
+        return series.flatMap((s) => {
+          const sums = s['intensity']?.['sum'] ?? [];
+          const counts = new Map(
+            (s['intensity']?.['totalCount'] ?? []).map(([n, start]) => [start, n]),
+          );
+          return sums.map(([count, start]) => ({
+            counterId: s.id,
+            name: names.get(s.id) ?? s.id,
+            date: start.slice(0, 10),
+            count,
+            readings: counts.get(start) ?? 0,
+          }));
+        });
+      }),
+    );
+  }
+
+  /** Hourly average of free spots per car park. */
+  getParkingSeries(days = 7): Observable<ParkingSeries[]> {
+    return forkJoin({
+      entities: this.getEntities('parking'),
+      series: this.getAggregated('parking', 'availableSpotNumber', 'avg', 'PT1H', days),
+    }).pipe(
+      map(({ entities, series }) => {
+        const byId = new Map(entities.map((e) => [e.id, e]));
+        return series.map((s) => ({
+          id: s.id,
+          name: byId.has(s.id) ? siteName(byId.get(s.id)!) : s.id,
+          capacity: byId.get(s.id)?.totalSpotNumber?.value ?? null,
+          hours: (s['availableSpotNumber']?.['avg'] ?? []).map(([available, start]) => ({
+            start: new Date(start),
+            available,
+          })),
+        }));
+      }),
+    );
+  }
+
+  /** Min and max of available bikes per station and hour. */
+  getStationSeries(days = 7): Observable<StationSeries[]> {
+    return forkJoin({
+      entities: this.getEntities('bike'),
+      series: this.getAggregated('bike', 'availableBikeNumber', 'min,max', 'PT1H', days),
+    }).pipe(
+      map(({ entities, series }) => {
+        const byId = new Map(entities.map((e) => [e.id, e]));
+        return series.map((s) => {
+          const attr = s['availableBikeNumber'];
+          const maxByStart = new Map((attr?.['max'] ?? []).map(([v, start]) => [start, v]));
+          return {
+            id: s.id,
+            name: byId.has(s.id) ? siteName(byId.get(s.id)!) : s.id,
+            capacity: byId.get(s.id)?.totalSlotNumber?.value ?? null,
+            hours: (attr?.['min'] ?? []).map(([min, start]) => ({
+              start: new Date(start),
+              min,
+              max: maxByStart.get(start) ?? min,
+            })),
+          };
+        });
+      }),
+    );
+  }
+
+  private getAggregated(
+    kind: SiteKind,
+    attr: string,
+    methods: string,
+    period: string,
+    days: number,
+  ): Observable<AggregatedEntity[]> {
+    // Start at midnight UTC so daily buckets are whole UTC days.
+    const since = new Date();
+    since.setUTCHours(0, 0, 0, 0);
+    since.setUTCDate(since.getUTCDate() - days);
+    return this.getTemporal<AggregatedEntity>({
+      type: NGSI_TYPES[kind],
+      attrs: attr,
+      timerel: 'after',
+      timeAt: since.toISOString(),
+      format: 'aggregatedValues',
+      aggrMethods: methods,
+      aggrPeriodDuration: period,
+      limit: 1000,
+    });
+  }
+
+  private getTemporal<T>(params: Record<string, string | number>): Observable<T[]> {
     return this.http
-      .get<TemporalEntity[]>(`${BASE_URL}/temporal/entities`, { params, observe: 'response' })
+      .get<T[]>(`${BASE_URL}/temporal/entities`, { params, observe: 'response' })
       .pipe(
         map((res) => {
           // 206 = the server cut the answer at 10,000 points (api-findings.md,
-          // section 3). Not expected at ~3,800 points; warn rather than hide it.
-          if (res.status === 206) console.warn('Counter readings truncated (HTTP 206)');
-          const summaries = new Map<string, CounterSummary>();
-          for (const entity of res.body ?? []) {
-            const summary = summarizeCounter(entity.intensity?.values ?? []);
-            if (summary) summaries.set(entity.id, summary);
-          }
-          return summaries;
+          // section 3). Not expected at these sizes; warn rather than hide it.
+          if (res.status === 206) console.warn('Temporal answer truncated (HTTP 206)', params);
+          return res.body ?? [];
         }),
       );
   }
