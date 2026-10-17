@@ -1,6 +1,6 @@
 # Data model of the source API
 
-Class diagram of the data published by the Montpellier Méditerranée Métropole API (NGSI-LD), as observed in step 0 (`data/raw/exploration/`, 2026-10-13). It describes the **source data**, not our database schema, which is still an open decision (see `decisions.md`).
+Class diagram of the data published by the Montpellier Méditerranée Métropole API (NGSI-LD), as observed in step 0 (`data/raw/exploration/`, 2026-10-13). It describes the **source data**, not our database schema (see `db/init/01_schema.sql` and decision D15).
 
 How to read it:
 

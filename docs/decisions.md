@@ -281,9 +281,40 @@ Reasons:
 
 ---
 
+## D15. Database schema: one table per sensor type, raw counter timestamps
+
+- **Date:** 2026-10-16
+- **Status:** Accepted
+
+**Context.** The ingestion needs tables. The three sensor types have different, well-known attributes (`data-model.md`). Some eco-counter timestamps are shifted, and the rule is not fully known yet (`api-findings.md`, section 6).
+
+**Decision.** SQL file `db/init/01_schema.sql`, run by the postgis image on the first start (empty volume).
+
+- **One description table per type** (`bike_station`, `parking`, `counter`) and **one reading table per type** (`bike_reading`, `parking_reading`, `counter_reading`), with typed, named columns.
+- **Keys:** the NGSI-LD ID as text primary key. Readings have the primary key `(sensor_id, observed_at)` and a foreign key to their description table.
+- **No duplicates:** the loader inserts with `ON CONFLICT DO NOTHING`, so the point shared by two API pages (HTTP 206) is ignored, and running the sync twice is harmless.
+- **Checks:** counts are `>= 0`. No upper bound on free parking spots, because P-019 exceeds its listed capacity: such rows are kept and handled in the analysis.
+- **Locations:** `geometry(Point, 4326)`, the WGS84 coordinates of the API.
+- **Traceability:** every row has `loaded_at` (time of loading).
+- **Counter timestamps:** `counter_reading.observed_at` is stored exactly as received. The correction (X2H since April 2026, maybe COM in summer 2025) will be a view, written once the rule is measured on all counters. `counter.family` (ID prefix: COM, ZLT, X2H) is a generated column for that view.
+
+**Rejected.**
+- *One generic table* `reading(site_id, attribute, observed_at, value)` (entity-attribute-value model): one loader for everything, but no types or business constraints, and pivots needed to get bikes and free slots on one row. Not worth it for 3 well-known types.
+- *Numeric surrogate keys:* the API ID is already unique and stable, and keeping it links rows to the raw files directly.
+- *Correcting counter timestamps at load time:* simpler queries, but a wrong rule would mean reloading everything.
+- *An index on `observed_at` alone* (for "all sensors at a given time") and a spatial index: not needed yet (161 sites). To add if queries are slow.
+- *A migration tool* (Alembic, Flyway): one more tool to learn, not needed while the database can be rebuilt from the raw files (D10).
+
+**Consequences.**
+- The schema only applies to an empty volume. Changing it means `docker compose down -v` (deletes data), then reloading from `data/raw/`.
+- Bike station readings come as three attributes with their own `observedAt`. The loader puts them on one row by timestamp. To check: do they always share the same timestamp?
+- `counter.old_version_id` is filled after all counters are inserted. The typo `Y2H20063163` must be mapped to `X2H20063163` (owner), otherwise the foreign key rejects it.
+- Tested on 2026-10-16 on a throwaway database: tables created, duplicate ignored, negative value and unknown sensor rejected.
+
+---
+
 ## Open decisions (not taken yet)
 
-- Database schema (tables, keys, indexes).
 - Sync interval of the collector.
 - Where the API code of D7 lives.
 - First forecasting target for project B.
