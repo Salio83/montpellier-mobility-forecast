@@ -313,6 +313,33 @@ Reasons:
 
 ---
 
+## D16. Car park sync: same flow as the counters, two attributes per request
+
+- **Date:** 2026-10-17
+- **Status:** Accepted
+
+**Context.** Car parks need the same incremental sync as the counters (D11). They differ in three ways: 5-minute data instead of hourly, two attributes per reading (`availableSpotNumber`, `status`), and 18 of the 39 car parks have no readings at all (HTTP 404, no space guidance system, confirmed by the owner).
+
+**Decision.** `ingestion/parkings.py`, built like `ingestion/counters.py`.
+
+- **All 39 car parks** go in the `parking` table. Only the 21 with `availableSpotNumber` in the entity list are asked for readings, so the 18 others do not count as failures.
+- **One request for both attributes** (`attrs=availableSpotNumber,status`). Measured on P-001 over 61 days: same timestamps for both, 206 resume matches the server count. The loader still joins them by timestamp and keeps a NULL if one side is missing.
+- **Windows of 30 days:** at most 8,640 points per attribute at 5-minute sampling, under the 10,000 cap, and far from the long ranges that timed out (HTTP 504 over 650 days).
+- **Look back 1 hour** before the last stored reading (counters: 3 days). Car parks are published within 10 minutes, so late points are rare.
+- **History from 2025-01-01**, as for the counters.
+
+**Rejected.**
+- *One request per attribute:* twice the requests, then a join in Python anyway.
+- *Skipping the stale car parks* (P-005, P-007): they still have useful history, and they may come back. The cost is a few empty requests per run.
+- *A generic sync shared with the counters:* the two modules differ in a few lines only. Worth factoring once the bike stations are added, if the pattern holds.
+
+**Consequences.**
+- First full load: about 21 car parks × 22 windows ≈ 460 requests, in the order of tens of minutes (estimate, not measured).
+- `windows()` is imported from `counters.py`. To move into a shared module when the third loader comes.
+- Tested on 2026-10-17 on a throwaway database over the last 2 days: 39 car parks stored (8 heights NULL for "N/A"), 7,301 readings for 19 car parks, 0 failures, 0 new rows on the second run.
+
+---
+
 ## Open decisions (not taken yet)
 
 - Sync interval of the collector.

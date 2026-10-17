@@ -85,9 +85,10 @@ def parse_content_range_end(header: str | None) -> datetime | None:
 def fetch_temporal(
     session: requests.Session, entity_id: str, attr: str, start: datetime, end: datetime
 ) -> list[ApiResponse]:
-    """All values of one attribute in [start, end), following HTTP 206 pages.
+    """All values of `attr` in [start, end), following HTTP 206 pages.
 
-    A response holds at most 10,000 points. When the range has more, the server
+    `attr` can list several attributes, comma-separated. A response holds at
+    most 10,000 points per attribute. When the range has more, the server
     answers 206 and cuts the end: the next request restarts from the last
     timestamp returned. That point comes back twice; the loader ignores it.
     """

@@ -43,6 +43,7 @@ Base URL: `https://portail-api-data.montpellier.fr`. Raw outputs are kept in `da
 - [measured] Following 206 responses works: 14 days of station 006 (2026-08-01 to 2026-08-15) came back in 3 pages (10,000 + 10,000 + 50 points). The 20,048 distinct points collected equal the sum of the server's own daily `totalCount` (20,048).
 - [measured] The boundary is inclusive: each new page starts with the last point of the previous page (9,999 new points out of 10,000, then 49 out of 50). Duplicates must be ignored.
 - [measured] Parking P-001 (5-min data): 1, 7, 14 and 31 days all returned HTTP 200 (0.5 s, 1.5 s, 1.9 s, 4.1 s; 221 KiB for 31 days). At 288 points/day, 10,000 points correspond to about 34 days (estimate).
+- [measured] Two attributes in one request (`attrs=availableSpotNumber,status`, parking P-001, 2026-10-17): the 10,000-point cap applies **per attribute**. 2026-08-01 to 2026-09-30 came back in 2 pages (HTTP 206 with 10,000 points of each attribute, then HTTP 200 with 4,149), 14.3 s in total, no 504. The 14,148 distinct timestamps equal the server's daily `totalCount` (14,148 for each attribute), and the two attributes had exactly the same timestamps on every point.
 - [spec] Timestamps are UTC. Observed timestamps end with `Z`.
 - [spec] Defaults are `timerel=after` and `timeAt=2025-12-31T23:59:59Z`. Always pass explicit `timeAt` / `endTimeAt`.
 - [measured] `lastN=3` returned 3 points, oldest first.
@@ -175,8 +176,8 @@ More quality notes (2026-10-15):
 ## 8. Still to verify
 
 - Real history start for bikes, parkings and the 42 counters whose first data is on 2025-01-01 (the first day queried).
-- Whether the 10,000-point cap counts points per attribute or in total, and whether it applies to `/temporal/entities` (several entities).
-- Whether the 206 resume logic also matches the server count for parkings and eco-counters (validated on one bike station only).
+- Whether the 10,000-point cap applies to `/temporal/entities` (several entities). For one entity it counts per attribute (section 3).
+- Whether the 206 resume logic also matches the server count for eco-counters (validated on one bike station and on parking P-001).
 - Whether bike stations really share the same timestamps (same point count per day suggests it).
 - Why parking coverage varies between 173 and 288 points per day (different sampling rates, or gaps).
 - Why 10 counters have no name.
